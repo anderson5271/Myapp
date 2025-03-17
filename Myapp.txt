@@ -1,3 +1,6 @@
+BASE_URL=$(grep "^${environment}=" urls.txt | cut -d'=' -f2)
+
+
 HYPERLINK="[${BUILD_VERSION}](https://app.com)"
 
 # Escape special characters for sed
