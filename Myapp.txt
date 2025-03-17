@@ -1,0 +1,10 @@
+HYPERLINK="[${BUILD_VERSION}](https://app.com)"
+
+# Escape special characters for sed
+ESCAPED_LINK=$(printf "%s\n" "$HYPERLINK" | sed 's/[\/&]/\\&/g')
+
+echo "$HYPERLINK"
+
+sed -E -i "/^\| ${row}/s/(([^|]+\|){${column}})[^|]+/\1 $ESCAPED_LINK/" "./version.md"
+
+cat version.md
