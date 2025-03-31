@@ -1,0 +1,98 @@
+name: Capture README Screenshot
+on:
+  schedule:
+    # Runs at 00:00 UTC every day - adjust as needed
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  capture-screenshot:
+    runs-on: self-hosted
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Playwright with browsers
+        run: |
+          npm init -y
+          npm install playwright
+          npx playwright install-deps
+          npx playwright install chromium
+
+      - name: Capture README screenshot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node <<EOF
+          const { chromium } = require('playwright');
+          const fs = require('fs');
+          const path = require('path');
+          
+          (async () => {
+            const browser = await chromium.launch();
+            const page = await browser.newPage();
+            await page.setViewportSize({ width: 1200, height: 800 });
+            
+            const repo = process.env.GITHUB_REPOSITORY;
+            const readmeUrl = `https://${process.env.GITHUB_ACTOR}:${process.env.GITHUB_TOKEN}@github.com/${repo}/blob/main/README.md`;
+            
+            console.log('Navigating to README...');
+            await page.goto(readmeUrl, { 
+              waitUntil: 'networkidle',
+              timeout: 60000 
+            });
+            
+            // Wait for GitHub's content security
+            await page.waitForSelector('#readme', { timeout: 30000 });
+            
+            // Hide elements that might change between runs
+            await page.evaluate(() => {
+              const elementsToHide = [
+                '.repository-content .BorderGrid',
+                '.repository-content .mt-4',
+                'header',
+                'footer'
+              ];
+              elementsToHide.forEach(selector => {
+                const el = document.querySelector(selector);
+                if (el) el.style.visibility = 'hidden';
+              });
+            });
+            
+            if (!fs.existsSync('screenshots')) {
+              fs.mkdirSync('screenshots');
+            }
+            
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const screenshotPath = path.join('screenshots', `readme-${timestamp}.png`);
+            
+            // Capture just the README content area
+            const readmeElement = await page.$('#readme');
+            await readmeElement.screenshot({ 
+              path: screenshotPath,
+              type: 'png',
+              quality: 90,
+              omitBackground: true
+            });
+            
+            console.log(\`Screenshot saved to \${screenshotPath}\`);
+            await browser.close();
+          })().catch(err => {
+            console.error('Error capturing screenshot:', err);
+            process.exit(1);
+          });
+          EOF
+
+      - name: Upload screenshot artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: readme-screenshots
+          path: screenshots/
+          retention-days: 7
